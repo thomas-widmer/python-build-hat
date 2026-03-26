@@ -1,14 +1,110 @@
-"""Test motors"""
+#!/usr/bin/env python3
+from multiprocessing import Queue
+from queue import Empty
 
-import time
-import unittest
+from buildhat import Hat, DistanceSensor, Motor
 
-from buildhat import Hat, Motor
-from buildhat.exc import DeviceError, MotorError
 
-# Standard-HAT auf UART0 + Reset GPIO4
-Hat(device="/dev/ttyAMA0", reset_gpio=4, boot0_gpio=22)
+def run_hat1(cmd_q: Queue, evt_q: Queue) -> None:
+    """
+    Worker process for Build HAT 1.
+    Sensor on port D, motor on port A.
+    """
+    Hat(
+        device="/dev/ttyAMA0",
+        reset_gpio=4,
+        boot0_gpio=22,
+        debug=False,
+    )
 
-m = Motor("A")
-m.set_default_speed(20)
-print("HAT1 Motor A erkannt:", m.get_position())
+    sensor_d = DistanceSensor("D")
+    motor_a = Motor("A")
+    motor_a.set_default_speed(30)
+
+    evt_q.put({"hat": 1, "event": "ready"})
+
+    running = True
+    while running:
+        try:
+            cmd = cmd_q.get(timeout=0.1)
+        except Empty:
+            continue
+
+        action = cmd.get("action")
+
+        if action == "read_distance":
+            try:
+                distance = sensor_d.get_distance()
+                evt_q.put(
+                    {
+                        "hat": 1,
+                        "event": "distance",
+                        "value": distance,
+                    }
+                )
+            except Exception as exc:
+                evt_q.put(
+                    {
+                        "hat": 1,
+                        "event": "error",
+                        "message": f"distance read failed: {exc}",
+                    }
+                )
+
+        elif action == "motor_start":
+            speed = int(cmd.get("speed", 30))
+            try:
+                motor_a.start(speed)
+                evt_q.put(
+                    {
+                        "hat": 1,
+                        "event": "motor_started",
+                        "speed": speed,
+                    }
+                )
+            except Exception as exc:
+                evt_q.put(
+                    {
+                        "hat": 1,
+                        "event": "error",
+                        "message": f"motor start failed: {exc}",
+                    }
+                )
+
+        elif action == "motor_stop":
+            try:
+                motor_a.stop()
+                evt_q.put({"hat": 1, "event": "motor_stopped"})
+            except Exception as exc:
+                evt_q.put(
+                    {
+                        "hat": 1,
+                        "event": "error",
+                        "message": f"motor stop failed: {exc}",
+                    }
+                )
+
+        elif action == "shutdown":
+            try:
+                motor_a.stop()
+            except Exception:
+                pass
+            evt_q.put({"hat": 1, "event": "stopped"})
+            running = False
+
+        else:
+            evt_q.put(
+                {
+                    "hat": 1,
+                    "event": "error",
+                    "message": f"unknown action: {action}",
+                }
+            )
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        "This module is intended to be started from control_demo.py"
+    )
+
+
