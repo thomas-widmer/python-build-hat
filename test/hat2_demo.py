@@ -3,7 +3,7 @@ import time
 from multiprocessing import Queue
 from queue import Empty
 
-from buildhat import Hat, DistanceSensor, Motor
+from buildhat import Hat, ColorDistanceSensor, Motor
 
 
 def run_hat2(cmd_q: Queue, evt_q: Queue) -> None:
@@ -18,7 +18,7 @@ def run_hat2(cmd_q: Queue, evt_q: Queue) -> None:
         debug=False,
     )
 
-    sensor_d = DistanceSensor("D")
+    sensor_d = ColorDistanceSensor("D")
     motor_a = Motor("A")
     motor_a.set_default_speed(30)
 
